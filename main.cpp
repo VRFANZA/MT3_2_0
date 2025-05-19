@@ -13,6 +13,11 @@ const char kWindowTitle[] = "LC1C_14_タカムラシュン_タイトル";
 const float kWindowWidth = 1080.0f;
 const float kWindowHeight = 720.0f;
 
+typedef struct Segment {
+	Vector3 origin;// 始点
+	Vector3 diff;// 終点
+}Segment;
+
 // 行列をベクトルに変換する関数
 Vector3 Transform(const Vector3& vector, const Matrix4x4& matrix);
 
@@ -75,6 +80,14 @@ void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMa
 
 void DrawSphere(const Vector3& center, float radius, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color);
 
+Vector3 Project(const Vector3& v1, const Vector3& v2);
+
+Vector3 ClosestPoint(const Vector3& point, const Segment& segment);
+
+Vector3 Subtract(const Vector3& v1, const Vector3& v2);
+
+Vector3 Add(const Vector3& v1, const Vector3& v2);
+
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
@@ -82,8 +95,26 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Novice::Initialize(kWindowTitle, 1280, 720);
 
 	// キー入力結果を受け取る箱
-	char keys[256] = {0};
-	char preKeys[256] = {0};
+	char keys[256] = { 0 };
+	char preKeys[256] = { 0 };
+
+	Vector3 rotate{ 0.0f,0.0f,0.0f };
+	Vector3 translate{ 0.0f,0.0f,0.0f };
+	Segment segment{ {-2.0f,-1.0f,0.0f},{3.0f,2.0f,2.0f} };
+	Vector3 point{ -1.5f,0.6f,0.6f };
+
+
+	Vector3 project = Project(Subtract(point, segment.origin), segment.diff);
+	Vector3 closestPoint = ClosestPoint(point, segment);
+
+	Matrix4x4 cameraMatrix = MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, { 0.26f, 0.0f, 0.0f }, { 0, 1.9f, -6.49f });
+	Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+	Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 1280.0f / 720.0f, 0.1f, 100.0f);
+	Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
+	Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280, 720, 0.0f, 1.0f);
+
+	Vector3 start = Transform(Transform(segment.origin, viewProjectionMatrix), viewportMatrix);
+	Vector3 end = Transform(Transform(Add(segment.origin, segment.diff), viewProjectionMatrix), viewportMatrix);
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -105,6 +136,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 		/// ↓描画処理ここから
 		///
+
+		// グリッドの描画
+		DrawGrid(viewProjectionMatrix, viewportMatrix);
+
+		// 線分の描画
+		Novice::DrawLine(
+			static_cast<int>(start.x),
+			static_cast<int>(start.y),
+			static_cast<int>(end.x),
+			static_cast<int>(end.y),
+			0xFFFFFFFF
+		);
+
+		// 点の描画
+		DrawSphere(point, 0.01f, viewProjectionMatrix, viewportMatrix, 0xFF0000FF); // 赤色で描画
+		DrawSphere(closestPoint, 0.01f, viewProjectionMatrix, viewportMatrix, 0x000000FF); // 黒色で描画 
 
 		///
 		/// ↑描画処理ここまで
@@ -192,6 +239,50 @@ void DrawSphere(const Vector3& center, float radius, const Matrix4x4& viewProjec
 			Novice::DrawLine((int)a.x, (int)a.y, (int)c.x, (int)c.y, color);
 		}
 	}
+}
+
+Vector3 Project(const Vector3& v1, const Vector3& v2) {
+	float dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z; // v1・v2
+	float normSq = v2.x * v2.x + v2.y * v2.y + v2.z * v2.z; // ||v2||^2
+
+	if (normSq == 0.0f) {
+		return Vector3{ 0.0f, 0.0f, 0.0f }; // ゼロベクトルへの射影はゼロ
+	}
+
+	float scale = dot / normSq;
+	return Vector3{
+		scale * v2.x,
+		scale * v2.y,
+		scale * v2.z
+	};
+}
+
+Vector3 Subtract(const Vector3& v1, const Vector3& v2)
+{
+	Vector3 result;
+
+	result = { v1.x - v2.x,v1.y - v2.y ,v1.z - v2.z };
+
+	return result;
+}
+
+Vector3 Add(const Vector3& v1, const Vector3& v2)
+{
+	Vector3 result;
+
+	result = { v1.x + v2.x,v1.y + v2.y ,v1.z + v2.z };
+
+	return result;
+}
+
+Vector3 ClosestPoint(const Vector3& point, const Segment& segment)
+{
+	Vector3 closestPoint;
+	Vector3 project = Project(Subtract(point, segment.origin), segment.diff);
+
+	closestPoint = { project.x + segment.origin.x,project.y + segment.origin.y ,project.z + segment.origin.z };
+
+	return closestPoint;
 }
 
 Vector3 Transform(const Vector3& vector, const Matrix4x4& matrix)
